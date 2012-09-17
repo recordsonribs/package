@@ -1,8 +1,9 @@
-# flac2mp3
+# package
 
-This is a fork of mxcl's http://gist.github.com/gists/124242 with some bugfixes
-and an extension for specifying quality.
+This is a fork of https://github.com/rmndk/flac2mp3 intended to allow for the creation of nice zipped up file packages for distribution by [Records On Ribs](http://recordsonribs.com).
 
-##Usage
-`flac2mp3 FLACFILE [V2 | V1 | V0 | 320]`
-Default quality is V0.
+## Todo
+
+* Directory glob for whole release.
+* S3 upload (intially with s3tools, then with internal Ruby).
+* Upload to Clearbits.
