@@ -1,0 +1,62 @@
+#!/usr/bin/env ruby
+# http://gist.github.com/gists/2998853/
+# Forked from http://gist.github.com/gists/124242
+require 'fileutils'
+require 'slugize'
+
+filename, quality = ARGV[0], ARGV[1]
+abort "Usage: flac2mp3 FLACFILE [V2|V1|V0|320]\nDefault (and recommended) quality is V0." if filename.nil?
+
+qualarg = case quality
+    when "V0","V1","V2" then quality
+    when "320" then "b 320"
+    else "V0"
+end
+
+map = {"TITLE" => "--tt", "ARTIST" => "--ta", "ALBUM" => "--tl", "TRACKNUMBER" => "--tn", "GENRE" => "--tg", "DATE" => "--ty"}
+args = ""
+
+# Chuck it into this hash, we need it in a moment.
+info = Hash.new
+
+`metaflac --export-tags-to=- "#{filename}"`.each_line do |line|
+    key, value = line.strip.split('=', 2)
+    key.upcase!
+    args << %Q{#{map[key]} "#{value.gsub('"', '\"')}" } if map[key]
+    info[key.downcase] = value
+end
+
+basename = File.basename(filename, File.extname(filename))
+
+paths = Hash.new
+
+['MP3', 'FLAC', 'Ogg'].each do |format|
+	paths[format.downcase] = "#{info['artist']} - #{info['album']} [#{format}]"
+	FileUtils.mkdir paths[format.downcase]
+end
+
+print "Decoding #{basename} to WAV..."
+system %Q[flac -dfs "#{filename}" -o "#{basename}.wav"]
+FileUtils.cp "#{filename}", "#{paths['flac']}/#{basename}.flac"
+puts "done"
+
+print "Encoding #{basename} into MP3..."
+system %Q[lame --quiet -#{qualarg} #{args} "#{basename}.wav" "#{paths['mp3']}/#{basename}.mp3"]
+puts "done"
+
+print "Encoding #{basename} to Ogg Vorbis..."
+system %Q[oggenc -Q -q 5 -o "#{paths['ogg']}/#{basename}.ogg" "#{basename}.wav"]
+puts "done"
+
+print "Zipping up directories..."
+paths.each do |format, path|
+	zip = "#{info['artist']} #{info['album']} #{format}".slugize
+	system %Q[zip -rq #{zip} "#{path}"]
+	FileUtils.rm_r path
+end
+puts "done"
+
+puts "Cleaning up"
+FileUtils.rm Dir.glob('*.wav')
+
+
