@@ -4,8 +4,8 @@
 require 'fileutils'
 require 'slugize'
 
-filename, quality = ARGV[0], ARGV[1]
-abort "Usage: flac2mp3 FLACFILE [V2|V1|V0|320]\nDefault (and recommended) quality is V0." if filename.nil?
+directory, quality = ARGV[0], ARGV[1]
+abort "Usage: flac2mp3 FLACFILE [V2|V1|V0|320]\nDefault (and recommended) quality is V0." if directory.nil?
 
 qualarg = case quality
     when "V0","V1","V2" then quality
@@ -13,40 +13,54 @@ qualarg = case quality
     else "V0"
 end
 
-map = {"TITLE" => "--tt", "ARTIST" => "--ta", "ALBUM" => "--tl", "TRACKNUMBER" => "--tn", "GENRE" => "--tg", "DATE" => "--ty"}
-args = ""
-
-# Chuck it into this hash, we need it in a moment.
-info = Hash.new
-
-`metaflac --export-tags-to=- "#{filename}"`.each_line do |line|
-    key, value = line.strip.split('=', 2)
-    key.upcase!
-    args << %Q{#{map[key]} "#{value.gsub('"', '\"')}" } if map[key]
-    info[key.downcase] = value
+if ! File.directory?(directory)
+    puts "#{directory} isn't a directory bailing out."
+    exit 1
 end
 
-basename = File.basename(filename, File.extname(filename))
-
+setup = false
 paths = Hash.new
+info = Hash.new
+Dir.glob("#{directory}/*.flac").each do |filename|
+    map = {"TITLE" => "--tt", "ARTIST" => "--ta", "ALBUM" => "--tl", "TRACKNUMBER" => "--tn", "GENRE" => "--tg", "DATE" => "--ty"}
+    args = ""
 
-['MP3', 'FLAC', 'Ogg'].each do |format|
-	paths[format.downcase] = "#{info['artist']} - #{info['album']} [#{format}]"
-	FileUtils.mkdir paths[format.downcase]
+    `metaflac --export-tags-to=- "#{filename}"`.each_line do |line|
+        key, value = line.strip.split('=', 2)
+        key.upcase!
+        args << %Q{#{map[key]} "#{value.gsub('"', '\"')}" } if map[key]
+        info[key.downcase] = value
+    end
+
+    basename = File.basename(filename, File.extname(filename))
+
+    # Guess the name of the album from the first track and proceed to make directories.
+    if ! setup
+        ['MP3', 'FLAC', 'Ogg'].each do |format|
+            paths[format.downcase] = "#{info['artist']} - #{info['album']} [#{format}]"
+            FileUtils.mkdir paths[format.downcase]
+        end
+
+        setup = true
+    end
+
+    print "Converting #{info['title']}..."
+    system %Q[flac -dfs "#{filename}" -o "#{basename}.wav"]
+    FileUtils.cp "#{filename}", "#{paths['flac']}/#{basename}.flac"
+    print "..."
+
+    # MP3
+    system %Q[lame --quiet -#{qualarg} #{args} "#{basename}.wav" "#{paths['mp3']}/#{basename}.mp3"]
+    print "..."
+
+    # Ogg Vorbis
+    system %Q[oggenc -Q -q 5 -o "#{paths['ogg']}/#{basename}.ogg" "#{basename}.wav"]   
+    print "..."
+
+    FileUtils.rm "#{basename}.wav"
+
+    puts "done"
 end
-
-print "Decoding #{basename} to WAV..."
-system %Q[flac -dfs "#{filename}" -o "#{basename}.wav"]
-FileUtils.cp "#{filename}", "#{paths['flac']}/#{basename}.flac"
-puts "done"
-
-print "Encoding #{basename} into MP3..."
-system %Q[lame --quiet -#{qualarg} #{args} "#{basename}.wav" "#{paths['mp3']}/#{basename}.mp3"]
-puts "done"
-
-print "Encoding #{basename} to Ogg Vorbis..."
-system %Q[oggenc -Q -q 5 -o "#{paths['ogg']}/#{basename}.ogg" "#{basename}.wav"]
-puts "done"
 
 print "Zipping up directories..."
 paths.each do |format, path|
@@ -55,8 +69,5 @@ paths.each do |format, path|
 	FileUtils.rm_r path
 end
 puts "done"
-
-puts "Cleaning up"
-FileUtils.rm Dir.glob('*.wav')
 
 

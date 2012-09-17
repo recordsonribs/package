@@ -4,6 +4,6 @@ This is a fork of https://github.com/rmndk/flac2mp3 intended to allow for the cr
 
 ## Todo
 
-* Directory glob for whole release.
+* <strike>Directory glob for whole release.</strike>
 * S3 upload (intially with s3tools, then with internal Ruby).
 * Upload to Clearbits.
